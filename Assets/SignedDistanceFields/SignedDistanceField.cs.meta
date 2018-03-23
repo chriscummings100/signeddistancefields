@@ -1,0 +1,16 @@
+fileFormatVersion: 2
+guid: 870767b862f15444cac06e5f01765980
+timeCreated: 1521828937
+licenseType: Free
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - m_sdf_shader: {fileID: 4800000, guid: cdbd6469c6f5b354cb754c4a33e8a176, type: 3}
+  - m_texture: {instanceID: 0}
+  - m_gradient_texture: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
