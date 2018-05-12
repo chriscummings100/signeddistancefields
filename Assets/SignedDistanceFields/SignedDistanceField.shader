@@ -1,4 +1,4 @@
-﻿Shader "Custom/SignedDistanceField" 
+﻿Shader "SDF/SignedDistanceField" 
 {
 	Properties
 	{
@@ -7,11 +7,11 @@
 		_Mode("Mode", Int) = 0
 		_Grid("Grid", Float) = 0
 		_Offset("Offset", Float) = 0
-		_DistanceScale("DistanceScale", Float) = 1
 		_BorderWidth("BorderWidth", Float) = 1
 		_Background("Background", Color) = (0,0,0.25,1)
 		_Fill("Fill", Color) = (1,0,0,1)
 		_Border("Border", Color) = (0,1,0,1)
+		_DistanceVisualisationScale("DistanceVisualisationScale", Float) = 1
 	}
 	SubShader
 	{
@@ -43,12 +43,12 @@
 			float4 _MainTex_TexelSize;
 			int _Mode;
 			float _Grid;
-			float _DistanceScale;
 			float _Offset;
 			float _BorderWidth;
 			float4 _Background;
 			float4 _Fill;
 			float4 _Border;
+			float _DistanceVisualisationScale;
 			
 			v2f vert (appdata v)
 			{
@@ -60,13 +60,18 @@
 				return o;
 			}
 			
+			//takes a pixel colour from the sdf texture and returns the output colour
 			float4 sdffunc(float4 sdf)
 			{
 				float4 res = _Background;
 
-				if (_Mode == 2) //Distance
+				if (_Mode == 1) //Raw
 				{
-					float d = sdf.r * _DistanceScale;
+					return sdf;
+				}
+				else if (_Mode == 2) //Distance
+				{
+					float d = sdf.r*_DistanceVisualisationScale;
 					res.r = saturate(d);
 					res.g = saturate(-d);
 					res.b = 0;
@@ -85,7 +90,7 @@
 				else if (_Mode == 5) //Border
 				{
 					float d = sdf.r + _Offset;
-					if (d > 0 && d < _BorderWidth)
+					if (abs(d) < _BorderWidth)
 					{
 						res = _Border;
 					}
@@ -93,21 +98,13 @@
 				else if (_Mode == 6) //SolidWithBorder
 				{
 					float d = sdf.r + _Offset;
-					if (d < 0)
-					{
-						res = _Fill;
-					}
-					else if (d < _BorderWidth)
+					if (abs(d) < _BorderWidth)
 					{
 						res = _Border;
 					}
-				}
-				else if (_Mode == 7) //GradientTexture
-				{
-					float d = sdf.r+_Offset;
-					if (d < 0)
+					else if (d < 0)
 					{
-						res = tex2D(_Gradient, abs(d));
+						res = _Fill;
 					}
 				}
 
@@ -119,16 +116,10 @@
 				//sample distance field
 				float4 sdf = tex2D(_MainTex, i.uv);
 
-				//use mode to define behaviour
 				fixed4 res;
-				if (_Mode == 1) //RawImage
+				if(sdf.a == 1)
 				{
-					//mode 1 returns the exact texture
-					res = tex2D(_MainTex, i.uv);
-				}
-				else if(sdf.a == 1)
-				{
-					//any other mode will use the sdf function if this sdf pixel is valid
+					//use the sdf function if this sdf pixel is valid
 					res = sdffunc(sdf);
 				}
 				else
@@ -146,7 +137,6 @@
 					gridness *= _Grid;
 					res = lerp(res, fixed4(0, 0, 0, 1), max(gridness.x,gridness.y));
 				}
-
 
 				return res;
 			}

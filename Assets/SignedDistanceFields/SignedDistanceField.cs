@@ -5,18 +5,13 @@ using UnityEngine;
 using UnityEditor;
 #endif
 
+//main signed distance fiedl test component
 [ExecuteInEditMode]
 [RequireComponent(typeof(MeshRenderer))]
 [RequireComponent(typeof(MeshFilter))]
 public class SignedDistanceField : MonoBehaviour
 {
-    public struct Pixel
-    {
-        public bool valid;
-        public float distance;
-        public Vector2 gradient;
-    }
-
+    //render mode
     public enum Mode
     {
         Black,
@@ -25,30 +20,33 @@ public class SignedDistanceField : MonoBehaviour
         Gradient,
         Solid,
         Border,
-        SolidWithBorder,
-        GradientTexture
+        SolidWithBorder
     }
 
+    //shader to use
     public Shader m_sdf_shader;
-    public Mode m_mode;
+
+    //render options
+    public Mode m_mode = Mode.SolidWithBorder;
     public Texture2D m_texture;
-    public bool m_show_grid;
-    public float m_distance_scale = 1f;
+    public bool m_show_grid = false;
     public FilterMode m_filter = FilterMode.Bilinear;
     public float m_text_grid_size = 40f;
-    public bool m_show_text;
-    public Texture2D m_gradient_texture;
-    public Color m_background = Color.blue;
-    public Color m_fill = Color.red;
-    public Color m_border = Color.green;
+    public bool m_show_text = false;
+    public Color m_background = new Color32(0x13,0x13,0x80,0xFF);
+    public Color m_fill = new Color32(0x7E,0x16,0x16,0xFF);
+    public Color m_border = new Color32(0xD2,0x17,0x17,0xFF);
+    public float m_border_width = 0.5f;
+    public float m_offset = 0f;
+    public float m_distance_visualisation_scale = 1f;
 
+    //internally created temp material
     Material m_material;
 
-    Pixel[] m_pixels;
-    int m_dims;
-
-    void Init()
+    //OnRenderObject calls init, then sets up render parameters
+    public void OnRenderObject()
     {
+        //make sure we have all the bits needed for rendering
         if (!m_texture)
         {
             m_texture = Texture2D.whiteTexture;
@@ -60,130 +58,48 @@ public class SignedDistanceField : MonoBehaviour
             GetComponent<MeshRenderer>().sharedMaterial = m_material;
             GetComponent<MeshFilter>().sharedMesh = BuildQuad(Vector2.one);
         }
-    }
 
-    public void OnEnable()
-    {
-        Init();
-    }
-
-    public void OnRenderObject()
-    {
-        Init();
+        //store texture filter mode
         m_texture.filterMode = m_filter;
         m_texture.wrapMode = TextureWrapMode.Clamp;
+
+        //store material properties
         m_material.SetTexture("_MainTex", m_texture);
-        m_material.SetTexture("_Gradient", m_gradient_texture ? m_gradient_texture : Texture2D.whiteTexture);
         m_material.SetInt("_Mode", (int)m_mode);
+        m_material.SetFloat("_BorderWidth", m_border_width);
+        m_material.SetFloat("_Offset", m_offset);
         m_material.SetFloat("_Grid", m_show_grid ? 0.75f : 0f);
-        m_material.SetFloat("_DistanceScale", m_distance_scale);
         m_material.SetColor("_Background", m_background);
         m_material.SetColor("_Fill", m_fill);
         m_material.SetColor("_Border", m_border);
+        m_material.SetFloat("_DistanceVisualisationScale", m_distance_visualisation_scale);
     }
 
+    //debug function for bodgily rendering a grid of pixel distances
     public void OnGUI()
     {
-        if (m_show_text && m_pixels != null)
+        if (m_show_text && m_texture)
         {
-            float sz = m_text_grid_size;
-            Vector2 tl = new Vector2(Screen.width, Screen.height) * 0.5f - Vector2.one * sz * m_dims * 0.5f;
+            Color[] pixels = m_texture.GetPixels();
 
+            float sz = m_text_grid_size;
+            Vector2 tl = new Vector2(Screen.width, Screen.height) * 0.5f - sz * new Vector2(m_texture.width, m_texture.height) * 0.5f;
             GUIStyle style = new GUIStyle();
             style.normal.textColor = Color.white;
             style.fontSize = 20;
             style.fontStyle = FontStyle.Bold;
             style.alignment = TextAnchor.MiddleCenter;
-            for (int y = 0; y < m_dims; y++)
+            for (int y = 0; y < m_texture.height; y++)
             {
-                for (int x = 0; x < m_dims; x++)
+                for (int x = 0; x < m_texture.width; x++)
                 {
-                    GUI.Label(new Rect(tl.x + x * sz, tl.y + y * sz, sz, sz), string.Format("{0:0.0}",GetPixel(x,y).distance), style);
+                    GUI.Label(new Rect(tl.x + x * sz, tl.y + y * sz, sz, sz), string.Format("{0:0.0}",pixels[m_texture.width*y+x].r, style));
                 }
             }
         }
     }
 
-    Pixel GetPixel(int x, int y)
-    {
-        return m_pixels[y * m_dims + x];
-    }
-    void SetPixel(int x, int y, Pixel p)
-    {
-        m_pixels[y * m_dims + x] = p;
-    }
-
-
-    public void BeginGenerate(int size)
-    {
-        m_dims = size;
-        m_pixels = new Pixel[m_dims * m_dims];
-    }
-
-    public void GenCircle(Vector2 centre, float rad)
-    {
-        for(int y = 0; y < m_dims; y++)
-        {
-            for(int x = 0; x < m_dims; x++)
-            {
-                Vector2 pixel_centre = new Vector2(x + 0.5f, y + 0.5f);
-                float dist_from_edge = (pixel_centre - centre).magnitude - rad;
-
-                Pixel p = GetPixel(x, y);
-                if(!p.valid || dist_from_edge < p.distance)
-                {
-                    p.valid = true;
-                    p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - centre).normalized * -Mathf.Sign(dist_from_edge);
-                    SetPixel(x, y, p);
-                }                
-            }
-        }
-    }
-
-    public void GenLine(Vector2 a, Vector2 b)
-    {
-        Vector2 line_dir = (b - a).normalized;
-        float line_len = (b - a).magnitude;
-
-        for (int y = 0; y < m_dims; y++)
-        {
-            for (int x = 0; x < m_dims; x++)
-            {
-                Vector2 pixel_centre = new Vector2(x + 0.5f, y + 0.5f);
-                Vector2 offset = pixel_centre - a;
-                float t = Mathf.Clamp(Vector3.Dot(offset, line_dir), 0f, line_len);
-                Vector2 online = a + t * line_dir;
-                float dist_from_edge = (pixel_centre - online).magnitude;
-
-                Pixel p = GetPixel(x, y);
-                if (!p.valid || dist_from_edge < p.distance)
-                {
-                    p.valid = true;
-                    p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - online).normalized * -Mathf.Sign(dist_from_edge);
-                    SetPixel(x, y, p);
-                }
-            }
-        }
-    }
-
-    public void EndGenerate()
-    {
-        Texture2D tex = new Texture2D(m_dims, m_dims, TextureFormat.RGBAFloat, false);
-        Color[] cols = new Color[m_pixels.Length];
-        for(int i = 0; i < m_pixels.Length; i++)
-        {
-            cols[i].r = m_pixels[i].distance;
-            cols[i].g = m_pixels[i].gradient.x;
-            cols[i].b = m_pixels[i].gradient.y;
-            cols[i].a = m_pixels[i].valid ? 1f : 0f;
-        }
-        tex.SetPixels(cols);
-        tex.Apply();
-        m_texture = tex;
-    }
-
+    //helper to build a temporary quad with the correct winding + uvs
     static Mesh BuildQuad(Vector2 half_size)
     {
         var mesh = new Mesh();
@@ -224,6 +140,7 @@ public class SignedDistanceField : MonoBehaviour
 
 }
 
+//custom inspector 
 #if UNITY_EDITOR
 [CustomEditor(typeof(SignedDistanceField))]
 public class SignedDisanceFieldEditor : Editor
@@ -232,28 +149,58 @@ public class SignedDisanceFieldEditor : Editor
     {
         serializedObject.Update();
 
-        DrawDefaultInspector(); 
+        DrawDefaultInspector();
 
         SignedDistanceField field = (SignedDistanceField)target;
         if (GUILayout.Button("Generate Centre Line"))
         {
-            field.BeginGenerate(16);
-            field.GenLine(new Vector2(3.5f, 8.5f), new Vector2(12.5f, 8.5f));
-            field.EndGenerate();
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
+            generator.GenLine(new Vector2(3.5f, 8.5f), new Vector2(12.5f, 8.5f));
+            field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 1 circle"))
         {
-            field.BeginGenerate(16);
-            field.GenCircle(new Vector2(8, 8), 4);
-            field.EndGenerate();
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
+            generator.GenCircle(new Vector2(8, 8), 4);
+            field.m_texture = generator.End();
         }
-        if (GUILayout.Button("Generate 3 circles"))
+        if (GUILayout.Button("Generate 1 rectangle"))
         {
-            field.BeginGenerate(16);
-            field.GenCircle(new Vector2(6, 6), 2f);
-            field.GenCircle(new Vector2(9, 10), 3f);
-            field.GenCircle(new Vector2(10, 6), 2f);
-            field.EndGenerate();
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
+            generator.GenRect(new Vector2(3, 5), new Vector2(12,10));
+            field.m_texture = generator.End();
+        }
+        if (GUILayout.Button("Generate 2 circles"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
+            generator.GenCircle(new Vector2(5, 7), 3);
+            generator.GenCircle(new Vector2(10, 8), 3.5f);
+            field.m_texture = generator.End();
+        }
+        if (GUILayout.Button("Generate 3 circles and a rect"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
+            generator.GenCircle(new Vector2(6, 6), 1.5f);
+            generator.GenCircle(new Vector2(9, 10), 2.5f);
+            generator.GenCircle(new Vector2(10, 6), 1.5f);
+            generator.GenRect(new Vector2(3, 7), new Vector2(13, 10));
+            field.m_texture = generator.End();
+        }
+        if (GUILayout.Button("Generate 3 circles and a rect hi"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
+            generator.GenCircle(new Vector2(6 * 4, 6 * 4), 1.5f * 4);
+            generator.GenCircle(new Vector2(9 * 4, 10 * 4), 2.5f * 4);
+            generator.GenCircle(new Vector2(10 * 4, 6 * 4), 1.5f * 4);
+            generator.GenRect(new Vector2(3 * 4, 7 * 4), new Vector2(13 * 4, 10 * 4));
+            field.m_texture = generator.End();
+        }
+        if (GUILayout.Button("Generate 2 close rectangles"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
+            generator.GenRect(new Vector2(4, 4), new Vector2(60, 35));
+            generator.GenRect(new Vector2(4, 34), new Vector2(60, 60));
+            field.m_texture = generator.End();
         }
 
         serializedObject.ApplyModifiedProperties();

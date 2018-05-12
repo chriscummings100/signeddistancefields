@@ -325,10 +325,13 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Assets\SignedDistanceFields\SignedDistanceField.cs" />
+    <Compile Include="Assets\SignedDistanceFields\SignedDistanceFieldGenerator.cs" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Assets\SignedDistanceFields\BasicSignedDistanceField.shader" />
+    <None Include="Assets\SignedDistanceFields\DistanceField.shader" />
+    <None Include="Assets\SignedDistanceFields\DistanceFieldWithOffset.shader" />
     <None Include="Assets\SignedDistanceFields\SignedDistanceField.shader" />
-    <None Include="Assets\SignedDistanceFields\SimpleDistanceField.shader" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="GenerateTargetFrameworkMonikerAttribute" />
