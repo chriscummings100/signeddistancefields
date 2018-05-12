@@ -155,51 +155,51 @@ public class SignedDisanceFieldEditor : Editor
         if (GUILayout.Button("Generate Centre Line"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
-            generator.GenLine(new Vector2(3.5f, 8.5f), new Vector2(12.5f, 8.5f));
+            generator.BFLine(new Vector2(3.5f, 8.5f), new Vector2(12.5f, 8.5f));
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 1 circle"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
-            generator.GenCircle(new Vector2(8, 8), 4);
+            generator.BFCircle(new Vector2(8, 8), 4);
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 1 rectangle"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
-            generator.GenRect(new Vector2(3, 5), new Vector2(12,10));
+            generator.BFRect(new Vector2(3, 5), new Vector2(12,10));
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 2 circles"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
-            generator.GenCircle(new Vector2(5, 7), 3);
-            generator.GenCircle(new Vector2(10, 8), 3.5f);
+            generator.BFCircle(new Vector2(5, 7), 3);
+            generator.BFCircle(new Vector2(10, 8), 3.5f);
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 3 circles and a rect"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(16, 16);
-            generator.GenCircle(new Vector2(6, 6), 1.5f);
-            generator.GenCircle(new Vector2(9, 10), 2.5f);
-            generator.GenCircle(new Vector2(10, 6), 1.5f);
-            generator.GenRect(new Vector2(3, 7), new Vector2(13, 10));
+            generator.BFCircle(new Vector2(6, 6), 1.5f);
+            generator.BFCircle(new Vector2(9, 10), 2.5f);
+            generator.BFCircle(new Vector2(10, 6), 1.5f);
+            generator.BFRect(new Vector2(3, 7), new Vector2(13, 10));
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 3 circles and a rect hi"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
-            generator.GenCircle(new Vector2(6 * 4, 6 * 4), 1.5f * 4);
-            generator.GenCircle(new Vector2(9 * 4, 10 * 4), 2.5f * 4);
-            generator.GenCircle(new Vector2(10 * 4, 6 * 4), 1.5f * 4);
-            generator.GenRect(new Vector2(3 * 4, 7 * 4), new Vector2(13 * 4, 10 * 4));
+            generator.BFCircle(new Vector2(6 * 4, 6 * 4), 1.5f * 4);
+            generator.BFCircle(new Vector2(9 * 4, 10 * 4), 2.5f * 4);
+            generator.BFCircle(new Vector2(10 * 4, 6 * 4), 1.5f * 4);
+            generator.BFRect(new Vector2(3 * 4, 7 * 4), new Vector2(13 * 4, 10 * 4));
             field.m_texture = generator.End();
         }
         if (GUILayout.Button("Generate 2 close rectangles"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
-            generator.GenRect(new Vector2(4, 4), new Vector2(60, 35));
-            generator.GenRect(new Vector2(4, 34), new Vector2(60, 60));
+            generator.BFRect(new Vector2(4, 4), new Vector2(60, 35));
+            generator.BFRect(new Vector2(4, 34), new Vector2(60, 60));
             field.m_texture = generator.End();
         }
 

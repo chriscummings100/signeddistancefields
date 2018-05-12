@@ -61,7 +61,7 @@ public class SignedDistanceFieldGenerator
     }
 
     //brute force circle generator - iterates over every pixel and calculates signed distance from edge of circle
-    public void GenCircle(Vector2 centre, float rad)
+    public void BFCircle(Vector2 centre, float rad)
     {
         for (int y = 0; y < m_y_dims; y++)
         {
@@ -83,7 +83,7 @@ public class SignedDistanceFieldGenerator
     }
 
     //brute force rectangle generator - iterates over every pixel and calculates signed distance from edge of rectangle
-    public void GenRect(Vector2 min, Vector2 max)
+    public void BFRect(Vector2 min, Vector2 max)
     {
         Vector2 centre = (min + max) * 0.5f;
         Vector2 halfsz = (max - min) * 0.5f;
@@ -137,7 +137,7 @@ public class SignedDistanceFieldGenerator
     }
 
     //brute force line generator - iterates over every pixel and calculates signed distance from edge of rectangle
-    public void GenLine(Vector2 a, Vector2 b)
+    public void BFLine(Vector2 a, Vector2 b)
     {
         Vector2 line_dir = (b - a).normalized;
         float line_len = (b - a).magnitude;
