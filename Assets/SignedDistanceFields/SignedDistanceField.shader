@@ -71,6 +71,7 @@
 				}
 				else if (_Mode == 2) //Distance
 				{
+					//render colour for distance for valid pixels
 					float d = sdf.r*_DistanceVisualisationScale;
 					res.r = saturate(d);
 					res.g = saturate(-d);
@@ -115,18 +116,7 @@
 			{
 				//sample distance field
 				float4 sdf = tex2D(_MainTex, i.uv);
-
-				fixed4 res;
-				if(sdf.a == 1)
-				{
-					//use the sdf function if this sdf pixel is valid
-					res = sdffunc(sdf);
-				}
-				else
-				{
-					//if sdf field isn't valid on this pixel, just return background
-					res = _Background;
-				}
+				fixed4 res = sdffunc(sdf);
 
 				//blend in grid
 				if (_Grid > 0)
