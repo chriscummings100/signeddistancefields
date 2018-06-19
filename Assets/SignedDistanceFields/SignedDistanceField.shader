@@ -56,7 +56,6 @@
 				v.vertex.y *= _MainTex_TexelSize.x * _MainTex_TexelSize.w;
 				o.vertex = UnityObjectToClipPos(v.vertex);
 				o.uv = TRANSFORM_TEX(v.uv, _MainTex);
-				o.uv = 1-o.uv;
 				return o;
 			}
 			
@@ -108,6 +107,10 @@
 						res = _Fill;
 					}
 				}
+
+				res.rgb *= res.a;
+				res.a = 1;
+
 
 				return res;
 			}

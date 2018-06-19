@@ -324,6 +324,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Assets\SignedDistanceFields\AnimatedSweep.cs" />
     <Compile Include="Assets\SignedDistanceFields\SignedDistanceField.cs" />
     <Compile Include="Assets\SignedDistanceFields\SignedDistanceFieldGenerator.cs" />
   </ItemGroup>
@@ -331,6 +332,7 @@
     <None Include="Assets\SignedDistanceFields\BasicSignedDistanceField.shader" />
     <None Include="Assets\SignedDistanceFields\DistanceField.shader" />
     <None Include="Assets\SignedDistanceFields\DistanceFieldWithOffset.shader" />
+    <None Include="Assets\SignedDistanceFields\Resources\catcredit.txt" />
     <None Include="Assets\SignedDistanceFields\SignedDistanceField.shader" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

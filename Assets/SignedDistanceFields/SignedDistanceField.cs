@@ -43,6 +43,18 @@ public class SignedDistanceField : MonoBehaviour
     //internally created temp material
     Material m_material;
 
+    private void Update()
+    {
+        //little bit of code to run an animated sweep from blog 
+        if (Input.GetKeyDown(KeyCode.Space))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator();
+            generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("cat"));
+            AnimatedGridSweep anim = new AnimatedGridSweep();
+            anim.Run(generator, this);
+        }
+    }
+
     //OnRenderObject calls init, then sets up render parameters
     public void OnRenderObject()
     {
@@ -201,6 +213,42 @@ public class SignedDisanceFieldEditor : Editor
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(32, 32);
             generator.PRect(new Vector2(10, 12), new Vector2(20, 18), 5);
+            field.m_texture = generator.End();
+        }
+
+        if (GUILayout.Button("Clear none edge pixels"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
+            //generator.BFRect(new Vector2(4, 4), new Vector2(60, 35));
+            //generator.BFRect(new Vector2(4, 34), new Vector2(60, 60));
+            generator.PCircle(new Vector2(20, 28), 12, 5);
+            generator.PCircle(new Vector2(40, 32), 14, 5);
+            generator.ClearNoneEdgePixels();
+            field.m_texture = generator.End();
+        }
+
+        if (GUILayout.Button("Sweep close rectangle pixels"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(64, 64);
+            generator.BFRect(new Vector2(4, 4), new Vector2(60, 35));
+            generator.BFRect(new Vector2(4, 34), new Vector2(60, 60));
+            generator.Sweep();
+            field.m_texture = generator.End();
+        }
+        if (GUILayout.Button("Sweep close circles"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(128, 128);
+            generator.PCircle(new Vector2(40, 56), 24, 5);
+            generator.PCircle(new Vector2(80, 64), 28, 5);
+            generator.Sweep();
+            field.m_texture = generator.End();
+        }
+
+        if (GUILayout.Button("Load texture"))
+        {
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator();
+            generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("aliaslines2"));
+            generator.Sweep();
             field.m_texture = generator.End();
         }
 

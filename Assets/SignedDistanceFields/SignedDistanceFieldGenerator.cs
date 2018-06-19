@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -8,13 +9,20 @@ public class SignedDistanceFieldGenerator
     public struct Pixel
     {
         public float distance;
-        public Vector2 gradient;
     }
 
     //internally created pixel buffer
-    Pixel[] m_pixels;
-    int m_x_dims;
-    int m_y_dims;
+    public Pixel[] m_pixels;
+    public int m_x_dims;
+    public int m_y_dims;
+
+    //empty constructor for when initializing later
+    public SignedDistanceFieldGenerator()
+    {
+        m_x_dims = 0;
+        m_y_dims = 0;
+        m_pixels = null;
+    }
 
     //constructor creates pixel buffer ready to start generation
     public SignedDistanceFieldGenerator(int width, int height)
@@ -25,7 +33,6 @@ public class SignedDistanceFieldGenerator
         for (int i = 0; i < m_pixels.Length; i++)
             m_pixels[i].distance = 999999f;
     }
-
 
     //helpers to read/write pixels during generation
     Pixel GetPixel(int x, int y)
@@ -48,8 +55,6 @@ public class SignedDistanceFieldGenerator
         for (int i = 0; i < m_pixels.Length; i++)
         {
             cols[i].r = m_pixels[i].distance;
-            cols[i].g = m_pixels[i].gradient.x;
-            cols[i].b = m_pixels[i].gradient.y;
             cols[i].a = m_pixels[i].distance < 999999f ? 1 : 0;
         }
 
@@ -75,7 +80,6 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - centre).normalized * -Mathf.Sign(dist_from_edge);
                     SetPixel(x, y, p);
                 }
             }
@@ -128,7 +132,6 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = offset_from_edge.normalized;
                     SetPixel(x, y, p);
                 }
             }
@@ -157,7 +160,6 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - online).normalized * -Mathf.Sign(dist_from_edge);
                     SetPixel(x, y, p);
                 }
             }
@@ -221,7 +223,6 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - online).normalized * -Mathf.Sign(dist_from_edge);
                     SetPixel(x, y, p);
                 }
             }
@@ -247,7 +248,6 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = (pixel_centre - centre).normalized * -Mathf.Sign(dist_from_edge);
                     SetPixel(x, y, p);
                 }
             }
@@ -305,10 +305,41 @@ public class SignedDistanceFieldGenerator
                 if (dist_from_edge < p.distance)
                 {
                     p.distance = dist_from_edge;
-                    p.gradient = offset_from_edge.normalized;
                     SetPixel(x, y, p);
                 }
             }
+        }
+    }
+
+    //simplest texture load function, just sets pixels to either 'very internal' or
+    //'very external' based on red channel
+    public void LoadFromTexture(Texture2D texture)
+    {
+        Color[] texpixels = texture.GetPixels();
+        m_x_dims = texture.width;
+        m_y_dims = texture.height;
+        m_pixels = new Pixel[m_x_dims * m_y_dims];
+        for (int i = 0; i < m_pixels.Length; i++)
+        {
+            if (texpixels[i].r > 0.5f)
+                m_pixels[i].distance = -99999f;
+            else
+                m_pixels[i].distance = 99999f;
+        }
+    }
+
+    public void LoadFromTextureAntiAliased(Texture2D texture)
+    {
+        Color[] texpixels = texture.GetPixels();
+        m_x_dims = texture.width;
+        m_y_dims = texture.height;
+        m_pixels = new Pixel[m_x_dims * m_y_dims];
+        for (int i = 0; i < m_pixels.Length; i++)
+        {
+            //r==1 means solid pixel, and r==0 means empty pixel and r==0.5 means half way between the 2
+            //interpolate between 'a bit outside' and 'a bit inside' to get approximate distance
+            float d = texpixels[i].r;
+            m_pixels[i].distance = Mathf.Lerp(0.75f, -0.75f, d);
         }
     }
 
@@ -356,57 +387,115 @@ public class SignedDistanceFieldGenerator
         }
     }
 
+    //compares a pixel for the sweep, and updates it with a new distance if necessary
+    public void Compare(float[] grid, int x, int y, int xoffset, int yoffset)
+    {
+        //calculate the location of the other pixel, and bail if in valid
+        int otherx = x + xoffset;
+        int othery = y + yoffset;
+        if (otherx < 0 || othery < 0 || otherx >= m_x_dims || othery >= m_y_dims)
+            return;
+
+        //read the distance values stored in both this and the other pixel
+        float curr_dist = grid[y * m_x_dims + x];
+        float other_dist = grid[othery * m_x_dims + otherx];
+
+        //calculate a potential new distance, using the one stored in the other pixel,
+        //PLUS the distance to the other pixel
+        float new_dist = other_dist + Mathf.Sqrt(xoffset * xoffset + yoffset * yoffset);
+
+        //if the potential new distance is better than our current one, update!
+        if (new_dist < curr_dist)
+            grid[y * m_x_dims + x] = new_dist;
+    }
+
+    public void SweepGrid(float[] grid)
+    {
+        // Pass 0
+        //loop over rows from top to bottom
+        for (int y = 0; y < m_y_dims; y++)
+        {
+            //loop over pixels from left to right
+            for (int x = 0; x < m_x_dims; x++)
+            {
+                Compare(grid, x, y, -1, 0);
+                Compare(grid, x, y, 0, -1);
+                Compare(grid, x, y, -1, -1);
+                Compare(grid, x, y, 1, -1);
+            }
+
+            //loop over pixels from right to left
+            for (int x = m_x_dims - 1; x >= 0; x--)
+            {
+                Compare(grid, x, y, 1, 0);
+            }
+        }
+
+        // Pass 1
+        //loop over rows from bottom to top
+        for (int y = m_y_dims - 1; y >= 0; y--)
+        {
+            //loop over pixels from right to left
+            for (int x = m_x_dims - 1; x >= 0; x--)
+            {
+                Compare(grid, x, y, 1, 0);
+                Compare(grid, x, y, 0, 1);
+                Compare(grid, x, y, -1, 1);
+                Compare(grid, x, y, 1, 1);
+            }
+
+            //loop over pixels from left to right
+            for (int x = 0; x < m_x_dims; x++)
+            {
+                Compare(grid, x, y, -1, 0);
+            }
+        }
+    }
+
+    //reads current field into 2 grids - 1 for inner pixels and 1 for outer pixels
+    void BuildSweepGrids(out float[] outside_grid, out float[] inside_grid)
+    {
+        outside_grid = new float[m_pixels.Length];
+        inside_grid = new float[m_pixels.Length];
+        for (int i = 0; i < m_pixels.Length; i++)
+        {
+            if (m_pixels[i].distance < 0)
+            {
+                //inside pixel. outer distance is set to 0, inner distance
+                //is preserved (albeit negated to make it positive)
+                outside_grid[i] = 0f;
+                inside_grid[i] = -m_pixels[i].distance;
+            }
+            else
+            {
+                //outside pixel. inner distance is set to 0,
+                //outer distance is preserved
+                inside_grid[i] = 0f;
+                outside_grid[i] = m_pixels[i].distance;
+            }
+        }
+    }
+
     //8-points Signed Sequential Euclidean Distance Transform, based on
     //http://www.codersnotes.com/notes/signed-distance-fields/
     public void Sweep()
     {
-        //the 'radius' of a pixel - i.e. the distance from centre to corner
-        //ultimately it's sqrt(0.5) ~= 0.7071
-        float pixel_radius = Mathf.Sqrt(0.5f*0.5f+0.5f*0.5f);
+        //clean the field so any none edge pixels simply contain 99999 for outer
+        //pixels, or -99999 for inner pixels
+        ClearNoneEdgePixels();
 
-        //first we need to fix up our existing pixels to eliminate dodgy data and
-        //ensure we start with only edges
+        //seperate the field into 2 grids - 1 for inner pixels and 1 for outer pixels
+        float[] outside_grid,inside_grid;
+        BuildSweepGrids(out outside_grid, out inside_grid);
 
+        //run the 8PSSEDT sweep on each grid
+        SweepGrid(outside_grid);
+        SweepGrid(inside_grid);
 
-        //first we build a grid for the outer pixels, and a grid for the inner pixels
-        //the outside grid will contain:
-        //  0s for inner pixels so they are ignored by the sweep
-        //  the precalculated distances for pixels very close to the edge (d < pixrad)
-        //  999999 for any others, to be filled in by the sweep
-        float[] outside_grid = new float[m_pixels.Length];
-        float[] inside_grid = new float[m_pixels.Length];
-        for(int i = 0; i < m_pixels.Length; i++)
-        {
-            //we assume a pixel is 'inside' the shape if it is both valid and has a distance of < 0
-            //if a pixel has not been written to, or has a positive distance, it is assumed outside
-            if(m_pixels[i].distance < 0)
-            {
-                //inside pixel. mark the outer grid as having 0 distance so it gets ignored
-                outside_grid[i] = 0f;
-
-                //for the inside grid, negate distance (we only want to deal with positives)
-                //then for pixels very close to the edge, we take their value as 'valid', for
-                //any others we set to a very large number to be fixed up during the sweep
-                float d = -m_pixels[i].distance;
-                if (m_pixels[i].distance > pixel_radius)
-                    inside_grid[i] = 999999f;
-                else
-                    inside_grid[i] = d;
-            }
-            else
-            {
-                //outside pixel
-                inside_grid[i] = 0f;
-
-                //for the outside grid, for pixels very close to the edge, we take their value 
-                //as 'valid', for any others we set to a very large number to be fixed up 
-                //during the sweep
-                float d = m_pixels[i].distance;
-                if (m_pixels[i].distance > pixel_radius)
-                    outside_grid[i] = 999999f;
-                else
-                    outside_grid[i] = d;
-            }
-        }
+        //write results back
+        for (int i = 0; i < m_pixels.Length; i++)
+            m_pixels[i].distance = outside_grid[i] - inside_grid[i];
     }
+
+
 }
