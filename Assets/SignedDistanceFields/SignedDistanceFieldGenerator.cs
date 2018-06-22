@@ -497,5 +497,172 @@ public class SignedDistanceFieldGenerator
             m_pixels[i].distance = outside_grid[i] - inside_grid[i];
     }
 
+    //very simple softening function - blurs pixels in with neighbours 
+    public void Soften()
+    {
+        //create a new buffer to contain the softened pixels        
+        Pixel[] new_pixels = new Pixel[m_x_dims * m_y_dims];
+
+        //iterate over all pixels
+        for (int y = 0; y < m_y_dims; y++) {
+            for (int x = 0; x < m_x_dims; x++) {
+
+                //start with 0 for the value, and 0 for the sum of the contribution used in the blend
+                float val = 0;
+                float contribsum = 0;
+
+                //iterate over each pixel in a 3x3 grid, checking we don't go out of bounds
+                for (int xoffset = -1; xoffset <= 1; xoffset++) {
+                    int samplex = x + xoffset;
+                    if (samplex < 0 || samplex >= m_x_dims)
+                        continue;
+                    for (int yoffset = -1; yoffset <= 1; yoffset++) {
+                        int sampley = y + yoffset;
+                        if (sampley < 0 || sampley >= m_y_dims)
+                            continue;
+
+                        //calculate amount this pixel will contribute
+                        //this is bitwise trick for 2^(x+y), giving 1 for centre pixel, 
+                        //0.5 for side, or 0.25 for corner neighbour
+                        int div = 1 << (Mathf.Abs(xoffset) + Mathf.Abs(yoffset));
+                        float contribution = 1f / div;
+
+                        //add the pixel distrance scaled by its contribution
+                        val += contribution * GetPixel(samplex, sampley).distance;
+                        contribsum += contribution;
+                    }
+                }
+
+                //divide by the sum (so we don't make the image brighter/darker)
+                val /= contribsum;
+
+                //store new pixel
+                new_pixels[y * m_x_dims + x].distance = val;
+            }
+        }
+
+        //once done, overwrite existing pixel buffer with new one
+        m_pixels = new_pixels;
+    }
+
+    //downsamples (i.e. scales down) the field by 2 by reading a softened version of the
+    //source image 
+    public void Downsample()
+    {
+        //to keep life simple, only downsample images that can be halfed in size!
+        if ((m_x_dims % 2) != 0 || (m_y_dims % 2) != 0)
+            throw new Exception("Dumb downsample only divides by 2 right now!");
+
+        //calculate new field size, and allocate new buffer
+        int new_x_dims = m_x_dims / 2;
+        int new_y_dims = m_y_dims / 2;
+        Pixel[] new_pixels = new Pixel[new_x_dims * new_y_dims];
+
+        //iterate over all NEW pixels
+        for (int y = 0; y < new_y_dims; y++) 
+        {
+            int srcy = y * 2;
+            for (int x = 0; x < new_x_dims; x++) 
+            {
+                int srcx = x * 2;
+
+                //combine the 4 pixels in the existing field that this one corresponds to
+                float new_dist = 0;
+                new_dist += GetPixel(srcx,srcy).distance * 0.25f;
+                new_dist += GetPixel(srcx+1, srcy).distance * 0.25f;
+                new_dist += GetPixel(srcx, srcy+1).distance * 0.25f;
+                new_dist += GetPixel(srcx+1, srcy+1).distance * 0.25f;
+
+                //also divide distance by 2, as we're shrinking the image by 2, and distances
+                //are measured in pixels!
+                new_dist /= 2;
+
+                //store new pixel
+                new_pixels[y * new_x_dims + x].distance = new_dist;
+            }
+        }
+
+        //once done, overwrite existing pixel buffer with new one and store new dimensions
+        m_pixels = new_pixels;
+        m_x_dims = new_x_dims;
+        m_y_dims = new_y_dims;
+    }
+
+    //these 2 functions do the mathematical work of solving the eikonal
+    //equations in 1D and 2D. 
+    // https://en.wikipedia.org/wiki/Eikonal_equation
+    float SolveEikonal1D(float horizontal, float vertical)
+    {
+        return Mathf.Min(horizontal, vertical) + 1f;
+    }
+    float SolveEikonal2D(float horizontal, float vertical)
+    {
+        float sum = horizontal + vertical;
+        float dist = sum * sum - 2.0f * (horizontal * horizontal + vertical * vertical - 1f);
+        return 0.5f * (sum + Mathf.Sqrt(dist));
+    }
+
+    //main eikonal equation solve. samples the grid to get candidate neighbours, then
+    //uses one of the above 2 functions to solve
+    void SolveEikonal(int x, int y, float[] grid)
+    {
+        //find the smallest of the 2 horizontal neighbours
+        float horizontalmin = float.MaxValue;
+        if (x > 0) horizontalmin = Mathf.Min(horizontalmin, grid[(x - 1) + y * m_x_dims]);
+        if (x < m_x_dims-1) horizontalmin = Mathf.Min(horizontalmin, grid[(x + 1) + y * m_x_dims]);
+
+        //find the smallest of the 2 vertical neighbours
+        float verticalmin = float.MaxValue;
+        if (y > 0) verticalmin = Mathf.Min(verticalmin, grid[x + (y - 1) * m_x_dims]);
+        if (y < m_y_dims - 1) verticalmin = Mathf.Min(verticalmin, grid[x + (y + 1) * m_x_dims]);
+
+        //read current
+        float current = grid[x + y * m_x_dims];
+
+        //solve eikonal equation in 1D or 2D depending on whether |h-v| >= 1
+        float eikonal;
+        if(Mathf.Abs(horizontalmin - verticalmin) >= 1.0f) 
+            eikonal = SolveEikonal1D(horizontalmin, verticalmin);
+        else 
+            eikonal = SolveEikonal2D(horizontalmin, verticalmin);
+
+        //either keep the current distance, or take the eikonal solution if it is smaller
+        grid[x+y*m_x_dims] = Mathf.Min(current,eikonal);
+    }
+
+    //sweep over the image using the eikonal equations to generate
+    //a perfect field (gradient length == 1 everywhere). This one is
+    //brute force as it simple iterates over every pixel n times.
+    //slow but effective!
+    public void EikonalSweepBruteForce(int iterations)
+    {
+        //clean the field so any none edge pixels simply contain 99999 for outer
+        //pixels, or -99999 for inner pixels
+        ClearNoneEdgePixels();
+
+        //seperate the field into 2 grids - 1 for inner pixels and 1 for outer pixels
+        float[] outside_grid, inside_grid;
+        BuildSweepGrids(out outside_grid, out inside_grid);
+
+        //repeat the eikonal iterations several times
+        for (int it = 0; it < iterations; it++) {
+            for (int y = 0; y < m_y_dims; y++) {
+                for (int x = 0; x < m_x_dims; x++) {
+                    SolveEikonal(x, y, outside_grid);
+                    SolveEikonal(x, y, inside_grid);
+                }
+            }
+        }
+
+        //finish off by calling the 8-points Signed Sequential Euclidean Distance Transform
+        //solvers to fix any remaining issues
+        SweepGrid(outside_grid);
+        SweepGrid(inside_grid);
+
+        //write results back
+        for (int i = 0; i < m_pixels.Length; i++)
+            m_pixels[i].distance = outside_grid[i] - inside_grid[i];
+
+    }
 
 }

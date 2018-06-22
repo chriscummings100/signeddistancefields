@@ -107,6 +107,30 @@
 						res = _Fill;
 					}
 				}
+                else if (_Mode == 7) //SoftBorder
+                {
+                    float d = sdf.r + _Offset;
+
+                    if (d < -_BorderWidth)
+                    {
+                        //if inside shape by more than _BorderWidth, use pure fill
+                        res = _Fill;
+                    }
+                    else if (d < 0)
+                    {
+                        //if inside shape but within range of border, lerp from fill to border colour
+                        float t = -d / _BorderWidth;
+                        t = t*t;
+                        res = lerp(_Border, _Fill, t);
+                    }
+                    else if (d < _BorderWidth)
+                    {
+                        //if outside shape but within range of border, lerp from border to background colour
+                        float t = d / _BorderWidth;
+                        t = t * t;
+                        res = lerp(_Border, _Background, t);
+                    }
+                }
 
 				res.rgb *= res.a;
 				res.a = 1;

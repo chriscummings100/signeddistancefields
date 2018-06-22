@@ -20,7 +20,8 @@ public class SignedDistanceField : MonoBehaviour
         Gradient,
         Solid,
         Border,
-        SolidWithBorder
+        SolidWithBorder,
+        SoftBorder
     }
 
     //shader to use
@@ -240,15 +241,16 @@ public class SignedDisanceFieldEditor : Editor
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(128, 128);
             generator.PCircle(new Vector2(40, 56), 24, 5);
             generator.PCircle(new Vector2(80, 64), 28, 5);
-            generator.Sweep();
             field.m_texture = generator.End();
         }
 
         if (GUILayout.Button("Load texture"))
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator();
-            generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("aliaslines2"));
+            generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("cathires"));
             generator.Sweep();
+            generator.Downsample();
+            generator.EikonalSweepBruteForce(25);
             field.m_texture = generator.End();
         }
 
