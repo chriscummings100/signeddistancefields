@@ -655,7 +655,7 @@ public class SignedDistanceFieldGenerator
         }
 
         //finish off by calling the 8-points Signed Sequential Euclidean Distance Transform
-        //solvers to fix any remaining issues
+        //solvers to efficiently clean up anything we didn't get to during the eikonal sweep
         SweepGrid(outside_grid);
         SweepGrid(inside_grid);
 
