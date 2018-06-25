@@ -12,7 +12,9 @@
 		_Fill("Fill", Color) = (1,0,0,1)
 		_Border("Border", Color) = (0,1,0,1)
 		_DistanceVisualisationScale("DistanceVisualisationScale", Float) = 1
-	}
+        _NeonBrightness("NeonBrightness", Float) = 0.75
+        _NeonPower("NeonPower", Float) = 5
+    }
 	SubShader
 	{
 		Tags { "RenderType"="Opaque" }
@@ -49,6 +51,8 @@
 			float4 _Fill;
 			float4 _Border;
 			float _DistanceVisualisationScale;
+            float _NeonBrightness;
+            float _NeonPower;
 			
 			v2f vert (appdata v)
 			{
@@ -120,7 +124,7 @@
                     {
                         //if inside shape but within range of border, lerp from fill to border colour
                         float t = -d / _BorderWidth;
-                        t = t*t;
+                        t = t * t;
                         res = lerp(_Border, _Fill, t);
                     }
                     else if (d < _BorderWidth)
@@ -131,6 +135,47 @@
                         res = lerp(_Border, _Background, t);
                     }
                 }
+                else if (_Mode == 8) //Neon
+                {
+                    float d = sdf.r + _Offset;
+
+                    //only do something if within range of border
+                    if (d > -_BorderWidth && d < _BorderWidth)
+                    {
+                        //calculate a value of 't' that goes from 0->1->0
+                        //around the edge of the geometry
+                        float t = d / _BorderWidth; //[-1:0:1]
+                        t = 1 - abs(t);             //[0:1:0]
+
+                        //lerp between background and border using t
+                        res = lerp(_Background, _Border, t);
+
+                        //raise t to a high power and add in as white
+                        //to give bloom effect
+                        res.rgb += pow(t, _NeonPower)*_NeonBrightness;
+                    }
+                }
+                else if (_Mode == 9) //Dropshadow
+                {
+                    float d = sdf.r + _Offset;
+
+                    //only do something if within range of border
+                    if (d > -_BorderWidth && d < _BorderWidth)
+                    {
+                        //calculate a value of 't' that goes from 0->1->0
+                        //around the edge of the geometry
+                        float t = d / _BorderWidth; //[-1:0:1]
+                        t = 1 - abs(t);             //[0:1:0]
+
+                                                    //lerp between background and border using t
+                        res = lerp(_Background, _Border, t);
+
+                        //raise t to a high power and add in as white
+                        //to give bloom effect
+                        res.rgb += pow(t, _NeonPower)*_NeonBrightness;
+                    }
+                }
+
 
 				res.rgb *= res.a;
 				res.a = 1;

@@ -21,7 +21,8 @@ public class SignedDistanceField : MonoBehaviour
         Solid,
         Border,
         SolidWithBorder,
-        SoftBorder
+        SoftBorder,
+        Neon
     }
 
     //shader to use
@@ -40,6 +41,8 @@ public class SignedDistanceField : MonoBehaviour
     public float m_border_width = 0.5f;
     public float m_offset = 0f;
     public float m_distance_visualisation_scale = 1f;
+    public float m_neon_power = 5f;
+    public float m_neon_brightness = 0.75f;
 
     //internally created temp material
     Material m_material;
@@ -86,6 +89,8 @@ public class SignedDistanceField : MonoBehaviour
         m_material.SetColor("_Fill", m_fill);
         m_material.SetColor("_Border", m_border);
         m_material.SetFloat("_DistanceVisualisationScale", m_distance_visualisation_scale);
+        m_material.SetFloat("_NeonPower", m_neon_power);
+        m_material.SetFloat("_NeonBrightness", m_neon_brightness);
     }
 
     //debug function for bodgily rendering a grid of pixel distances
@@ -250,7 +255,6 @@ public class SignedDisanceFieldEditor : Editor
             generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("cathires"));
             generator.Sweep();
             generator.Downsample();
-            generator.EikonalSweepBruteForce(25);
             field.m_texture = generator.End();
         }
 
