@@ -10,4 +10,11 @@ Whilst the repo is focussed on the blog, it is designed to be a simple toolkit f
 - Downsampling
 - Softening
 
+Effects in the demo so far:
+- Simple visualisation of the field
+- Creating soft borders to avoid aliasing
+- Edging effects such as gradients or neon glows
+- Drop shadows
+- Morphing between fields
+
 Enjoy!

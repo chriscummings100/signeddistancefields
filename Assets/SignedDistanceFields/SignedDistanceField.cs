@@ -22,7 +22,10 @@ public class SignedDistanceField : MonoBehaviour
         Border,
         SolidWithBorder,
         SoftBorder,
-        Neon
+        Neon,
+        EdgeTexture,
+        DropShadow,
+        Bevel
     }
 
     //shader to use
@@ -41,8 +44,22 @@ public class SignedDistanceField : MonoBehaviour
     public float m_border_width = 0.5f;
     public float m_offset = 0f;
     public float m_distance_visualisation_scale = 1f;
+
+    //used for neon effect (blog post 7)
     public float m_neon_power = 5f;
     public float m_neon_brightness = 0.75f;
+
+    //used for edge texture effect (blog post 7)
+    public Texture2D m_edge_texture;
+
+    //used for drop shadow (blog post 7)
+    public float m_shadow_dist;
+    public float m_shadow_border_width;
+
+    //used for morphing effect (blog post 7)
+    [Range(0,1)]
+    public float m_circle_morph_amount;
+    public float m_circle_morph_radius;
 
     //internally created temp material
     Material m_material;
@@ -57,6 +74,8 @@ public class SignedDistanceField : MonoBehaviour
             AnimatedGridSweep anim = new AnimatedGridSweep();
             anim.Run(generator, this);
         }
+
+        m_circle_morph_amount = (Mathf.Sin(Time.time * 6) + 1) * 0.5f;
     }
 
     //OnRenderObject calls init, then sets up render parameters
@@ -89,8 +108,16 @@ public class SignedDistanceField : MonoBehaviour
         m_material.SetColor("_Fill", m_fill);
         m_material.SetColor("_Border", m_border);
         m_material.SetFloat("_DistanceVisualisationScale", m_distance_visualisation_scale);
+
+        //parameters for effects in blog post 7
         m_material.SetFloat("_NeonPower", m_neon_power);
         m_material.SetFloat("_NeonBrightness", m_neon_brightness);
+        m_material.SetTexture("_EdgeTex", m_edge_texture);
+        m_material.SetFloat("_ShadowDist", m_shadow_dist);
+        m_material.SetFloat("_ShadowBorderWidth", m_shadow_border_width);
+        m_material.SetFloat("_CircleMorphAmount", m_circle_morph_amount);
+        m_material.SetFloat("_CircleMorphRadius", m_circle_morph_radius);
+
     }
 
     //debug function for bodgily rendering a grid of pixel distances
@@ -243,9 +270,10 @@ public class SignedDisanceFieldEditor : Editor
         }
         if (GUILayout.Button("Sweep close circles"))
         {
-            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(128, 128);
-            generator.PCircle(new Vector2(40, 56), 24, 5);
-            generator.PCircle(new Vector2(80, 64), 28, 5);
+            SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(512, 512);
+            generator.PCircle(new Vector2(160, 224), 92, 5);
+            generator.PCircle(new Vector2(340, 256), 103, 5);
+            generator.Sweep();
             field.m_texture = generator.End();
         }
 

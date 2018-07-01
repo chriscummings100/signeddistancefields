@@ -44,18 +44,109 @@ public class SignedDistanceFieldGenerator
         m_pixels[y * m_x_dims + x] = p;
     }
 
+    //returns the smallest of x and y, flipping their sign if 'sign' == -1
+    float SignedMin(float sign, float x, float y)
+    {
+        return sign*x < sign*y ? x : y;
+    }
+
     //takes the generated pixel buffer and uses it to fill out a texture
-    public Texture2D End()
+    public Texture2D End(bool calc_grad = true)
     {
         //allocate an 'RGBAFloat' texture of the correct dimensions
         Texture2D tex = new Texture2D(m_x_dims, m_y_dims, TextureFormat.RGBAFloat, false);
 
-        //build our array of colours
+        //alloc array of colours
         Color[] cols = new Color[m_pixels.Length];
-        for (int i = 0; i < m_pixels.Length; i++)
+
+        //check if field gradient is wanted (blog post 7)
+        if (!calc_grad)
         {
-            cols[i].r = m_pixels[i].distance;
-            cols[i].a = m_pixels[i].distance < 999999f ? 1 : 0;
+            //no field gradient needed 
+            //build our array of colours
+            for (int i = 0; i < m_pixels.Length; i++)
+            {
+                cols[i].r = m_pixels[i].distance;
+                cols[i].a = m_pixels[i].distance < 999999f ? 1 : 0;
+            }
+        }
+        else
+        {
+            //iterate over all pixels
+            for (int y = 0; y < m_y_dims; y++)
+            {
+                for (int x = 0; x < m_x_dims; x++)
+                {
+
+                    //start with 0 for the value, and 0 for the sum of the contribution used in the blend
+                    Vector2 grad = Vector2.zero;
+                    float d = GetPixel(x, y).distance;
+                    float sign = d >= 0 ? 1.0f : -1.0f;
+
+                    //iterate over each pixel in a 3x3 grid, checking we don't go out of bounds
+                    for (int xoffset = -1; xoffset <= 1; xoffset++)
+                    {
+                        int samplex = x + xoffset;
+                        if (samplex < 0 || samplex >= m_x_dims)
+                            continue;
+                        for (int yoffset = -1; yoffset <= 1; yoffset++)
+                        {
+                            int sampley = y + yoffset;
+                            if (sampley < 0 || sampley >= m_y_dims)
+                                continue;
+
+                            float diff = d - GetPixel(samplex, sampley).distance;
+                            if (xoffset != 0)
+                                grad.x += diff / xoffset;
+                            if (yoffset != 0)
+                                grad.y += diff / yoffset;
+                        }
+                    }
+
+                    grad = sign * grad.normalized;
+
+                    int i = y * m_x_dims + x;
+                    cols[i].r = d;
+                    cols[i].g = grad.x;
+                    cols[i].b = grad.y;
+                    cols[i].a = d < 999999f ? 1 : 0;
+
+                }
+            }
+
+            /*
+            //WIP field gradient calculation using partial derivatives
+            //field gradient needed (blog post 7)
+            for (int y = 0; y < m_y_dims; y++)
+            {
+                for (int x = 0; x < m_x_dims; x++)
+                {
+                    //get d, and also it's sign (i.e. inside or outside)
+                    float d = GetPixel(x,y).distance;
+                    float sign = d >= 0 ? 1.0f : -1.0f;
+                    float maxval = float.MaxValue * sign;
+
+                    //read neighbour distances, accounting edges
+                    float x0 = x > 0 ? GetPixel(x - 1, y).distance : maxval;
+                    float x1 = x < (m_x_dims - 1) ? GetPixel(x + 1, y).distance : maxval;
+                    float y0 = y > 0 ? GetPixel(x, y - 1).distance : maxval;
+                    float y1 = y < (m_y_dims - 1) ? GetPixel(x, y + 1).distance : maxval;
+
+                    float xgrad = sign*x0 < sign*x1 ? (d - x0) : -(d - x1);
+                    float ygrad = sign*y0 < sign*y1 ? (d - y0) : -(d - y1);
+
+                    Vector2 grad = new Vector2(xgrad, ygrad);
+                    grad = sign*grad.normalized;
+
+                    int i = y * m_x_dims + x;
+                    cols[i].r = d;
+                    cols[i].g = grad.x;
+                    cols[i].b = grad.y;
+                    cols[i].a = d < 999999f ? 1 : 0;
+                }
+            }
+            */
+
         }
 
         //write into the texture
@@ -656,8 +747,8 @@ public class SignedDistanceFieldGenerator
 
         //finish off by calling the 8-points Signed Sequential Euclidean Distance Transform
         //solvers to efficiently clean up anything we didn't get to during the eikonal sweep
-        SweepGrid(outside_grid);
-        SweepGrid(inside_grid);
+        //SweepGrid(outside_grid);
+        //SweepGrid(inside_grid);
 
         //write results back
         for (int i = 0; i < m_pixels.Length; i++)
