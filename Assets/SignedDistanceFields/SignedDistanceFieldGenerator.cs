@@ -9,6 +9,7 @@ public class SignedDistanceFieldGenerator
     public struct Pixel
     {
         public float distance;
+        public bool edge; //used by eikonal sweep to denote unchaneable pixels
     }
 
     //internally created pixel buffer
@@ -51,103 +52,48 @@ public class SignedDistanceFieldGenerator
     }
 
     //takes the generated pixel buffer and uses it to fill out a texture
-    public Texture2D End(bool calc_grad = true)
+    public Texture2D End()
     {
         //allocate an 'RGBAFloat' texture of the correct dimensions
         Texture2D tex = new Texture2D(m_x_dims, m_y_dims, TextureFormat.RGBAFloat, false);
 
         //alloc array of colours
         Color[] cols = new Color[m_pixels.Length];
-
-        //check if field gradient is wanted (blog post 7)
-        if (!calc_grad)
+        
+        //iterate over all pixels and calculate a colour for each one
+        //note: updated in blog post 7 to include gradient
+        for (int y = 0; y < m_y_dims; y++)
         {
-            //no field gradient needed 
-            //build our array of colours
-            for (int i = 0; i < m_pixels.Length; i++)
+            for (int x = 0; x < m_x_dims; x++)
             {
-                cols[i].r = m_pixels[i].distance;
-                cols[i].a = m_pixels[i].distance < 999999f ? 1 : 0;
+                //get d, and also it's sign (i.e. inside or outside)
+                float d = GetPixel(x,y).distance;
+                float sign = d >= 0 ? 1.0f : -1.0f;
+                float maxval = float.MaxValue * sign;
+
+                //read neighbour distances, ignoring border pixels
+                float x0 = x > 0 ? GetPixel(x - 1, y).distance : maxval;
+                float x1 = x < (m_x_dims - 1) ? GetPixel(x + 1, y).distance : maxval;
+                float y0 = y > 0 ? GetPixel(x, y - 1).distance : maxval;
+                float y1 = y < (m_y_dims - 1) ? GetPixel(x, y + 1).distance : maxval;
+
+                //use the smallest neighbour in each direction to calculate the partial deriviates
+                float xgrad = sign*x0 < sign*x1 ? -(x0-d) : (x1-d);
+                float ygrad = sign*y0 < sign*y1 ? -(y0-d) : (y1-d);
+
+                //combine partial derivatives to get gradient
+                Vector2 grad = new Vector2(xgrad, ygrad);
+
+                //store distance in red channel, and gradient in green/blue channels
+                Color col = new Color();
+                col.r = d;
+                col.g = grad.x;
+                col.b = grad.y;
+                col.a = d < 999999f ? 1 : 0;
+                cols[y * m_x_dims + x] = col;
             }
         }
-        else
-        {
-            //iterate over all pixels
-            for (int y = 0; y < m_y_dims; y++)
-            {
-                for (int x = 0; x < m_x_dims; x++)
-                {
-
-                    //start with 0 for the value, and 0 for the sum of the contribution used in the blend
-                    Vector2 grad = Vector2.zero;
-                    float d = GetPixel(x, y).distance;
-                    float sign = d >= 0 ? 1.0f : -1.0f;
-
-                    //iterate over each pixel in a 3x3 grid, checking we don't go out of bounds
-                    for (int xoffset = -1; xoffset <= 1; xoffset++)
-                    {
-                        int samplex = x + xoffset;
-                        if (samplex < 0 || samplex >= m_x_dims)
-                            continue;
-                        for (int yoffset = -1; yoffset <= 1; yoffset++)
-                        {
-                            int sampley = y + yoffset;
-                            if (sampley < 0 || sampley >= m_y_dims)
-                                continue;
-
-                            float diff = d - GetPixel(samplex, sampley).distance;
-                            if (xoffset != 0)
-                                grad.x += diff / xoffset;
-                            if (yoffset != 0)
-                                grad.y += diff / yoffset;
-                        }
-                    }
-
-                    grad = sign * grad.normalized;
-
-                    int i = y * m_x_dims + x;
-                    cols[i].r = d;
-                    cols[i].g = grad.x;
-                    cols[i].b = grad.y;
-                    cols[i].a = d < 999999f ? 1 : 0;
-
-                }
-            }
-
-            /*
-            //WIP field gradient calculation using partial derivatives
-            //field gradient needed (blog post 7)
-            for (int y = 0; y < m_y_dims; y++)
-            {
-                for (int x = 0; x < m_x_dims; x++)
-                {
-                    //get d, and also it's sign (i.e. inside or outside)
-                    float d = GetPixel(x,y).distance;
-                    float sign = d >= 0 ? 1.0f : -1.0f;
-                    float maxval = float.MaxValue * sign;
-
-                    //read neighbour distances, accounting edges
-                    float x0 = x > 0 ? GetPixel(x - 1, y).distance : maxval;
-                    float x1 = x < (m_x_dims - 1) ? GetPixel(x + 1, y).distance : maxval;
-                    float y0 = y > 0 ? GetPixel(x, y - 1).distance : maxval;
-                    float y1 = y < (m_y_dims - 1) ? GetPixel(x, y + 1).distance : maxval;
-
-                    float xgrad = sign*x0 < sign*x1 ? (d - x0) : -(d - x1);
-                    float ygrad = sign*y0 < sign*y1 ? (d - y0) : -(d - y1);
-
-                    Vector2 grad = new Vector2(xgrad, ygrad);
-                    grad = sign*grad.normalized;
-
-                    int i = y * m_x_dims + x;
-                    cols[i].r = d;
-                    cols[i].g = grad.x;
-                    cols[i].b = grad.y;
-                    cols[i].a = d < 999999f ? 1 : 0;
-                }
-            }
-            */
-
-        }
+       
 
         //write into the texture
         tex.SetPixels(cols);
@@ -464,14 +410,15 @@ public class SignedDistanceFieldGenerator
     //cleans the field down so only pixels that lie on an edge 
     //contain a valid value. all others will either contain a
     //very large -ve or +ve value just to indicate inside/outside
-    public void ClearNoneEdgePixels()
+    public void ClearAndMarkNoneEdgePixels()
     {
         for (int y = 0; y < m_y_dims; y++)
         {
             for (int x = 0; x < m_y_dims; x++)
             {
                 Pixel pix = GetPixel(x, y);
-                if(!IsEdgePixel(x,y))
+                pix.edge = IsEdgePixel(x, y); //for eikonal sweep, mark edge pixels
+                if (!pix.edge)
                     pix.distance = pix.distance > 0 ? 99999f : -99999f;
                 SetPixel(x,y,pix);
             }
@@ -573,7 +520,7 @@ public class SignedDistanceFieldGenerator
     {
         //clean the field so any none edge pixels simply contain 99999 for outer
         //pixels, or -99999 for inner pixels
-        ClearNoneEdgePixels();
+        ClearAndMarkNoneEdgePixels();
 
         //seperate the field into 2 grids - 1 for inner pixels and 1 for outer pixels
         float[] outside_grid,inside_grid;
@@ -589,7 +536,7 @@ public class SignedDistanceFieldGenerator
     }
 
     //very simple softening function - blurs pixels in with neighbours 
-    public void Soften()
+    public void Soften(int radius)
     {
         //create a new buffer to contain the softened pixels        
         Pixel[] new_pixels = new Pixel[m_x_dims * m_y_dims];
@@ -602,25 +549,21 @@ public class SignedDistanceFieldGenerator
                 float val = 0;
                 float contribsum = 0;
 
-                //iterate over each pixel in a 3x3 grid, checking we don't go out of bounds
-                for (int xoffset = -1; xoffset <= 1; xoffset++) {
+                //iterate over each pixel in a radiusxradius grid, checking we don't go out of bounds
+                for (int xoffset = -radius; xoffset <= radius; xoffset++) {
                     int samplex = x + xoffset;
                     if (samplex < 0 || samplex >= m_x_dims)
                         continue;
-                    for (int yoffset = -1; yoffset <= 1; yoffset++) {
+                    for (int yoffset = -radius; yoffset <= radius; yoffset++) {
                         int sampley = y + yoffset;
                         if (sampley < 0 || sampley >= m_y_dims)
                             continue;
-
-                        //calculate amount this pixel will contribute
-                        //this is bitwise trick for 2^(x+y), giving 1 for centre pixel, 
-                        //0.5 for side, or 0.25 for corner neighbour
-                        int div = 1 << (Mathf.Abs(xoffset) + Mathf.Abs(yoffset));
-                        float contribution = 1f / div;
+                        if ((xoffset * xoffset + yoffset * yoffset) > radius*radius)
+                            continue;
 
                         //add the pixel distrance scaled by its contribution
-                        val += contribution * GetPixel(samplex, sampley).distance;
-                        contribsum += contribution;
+                        val += GetPixel(samplex, sampley).distance;
+                        contribsum += 1f;
                     }
                 }
 
@@ -688,71 +631,82 @@ public class SignedDistanceFieldGenerator
     }
     float SolveEikonal2D(float horizontal, float vertical)
     {
-        float sum = horizontal + vertical;
-        float dist = sum * sum - 2.0f * (horizontal * horizontal + vertical * vertical - 1f);
-        return 0.5f * (sum + Mathf.Sqrt(dist));
+        //solve eikonal equation in 2D if or can, or revert to 1D if |h-v| >= 1
+        if (Mathf.Abs(horizontal - vertical) < 1.0f)
+        {
+            float sum = horizontal + vertical;
+            float dist = sum * sum - 2.0f * (horizontal * horizontal + vertical * vertical - 1f);
+            return 0.5f * (sum + Mathf.Sqrt(dist));
+        }
+        else
+        {
+            return SolveEikonal1D(horizontal, vertical);
+        }
     }
 
     //main eikonal equation solve. samples the grid to get candidate neighbours, then
     //uses one of the above 2 functions to solve
-    void SolveEikonal(int x, int y, float[] grid)
+    void SolveEikonal(int x, int y)
     {
-        //find the smallest of the 2 horizontal neighbours
+        //get pixel and leave unchanged if it is an edge pixel
+        Pixel p = GetPixel(x, y);
+        if (p.edge)
+            return;
+
+        //read current and sign, then correct sign to work with +ve distance
+        float current = p.distance;
+        float sign = current < 0 ? -1.0f : 1.0f;
+        current *= sign;
+
+        //find the smallest of the 2 horizontal neighbours (correcting for sign)
         float horizontalmin = float.MaxValue;
-        if (x > 0) horizontalmin = Mathf.Min(horizontalmin, grid[(x - 1) + y * m_x_dims]);
-        if (x < m_x_dims-1) horizontalmin = Mathf.Min(horizontalmin, grid[(x + 1) + y * m_x_dims]);
+        if (x > 0) horizontalmin = Mathf.Min(horizontalmin, sign * GetPixel(x-1,y).distance);
+        if (x < m_x_dims-1) horizontalmin = Mathf.Min(horizontalmin, sign * GetPixel(x + 1, y).distance);
 
         //find the smallest of the 2 vertical neighbours
         float verticalmin = float.MaxValue;
-        if (y > 0) verticalmin = Mathf.Min(verticalmin, grid[x + (y - 1) * m_x_dims]);
-        if (y < m_y_dims - 1) verticalmin = Mathf.Min(verticalmin, grid[x + (y + 1) * m_x_dims]);
+        if (y > 0) verticalmin = Mathf.Min(verticalmin, sign * GetPixel(x, y - 1).distance);
+        if (y < m_y_dims - 1) verticalmin = Mathf.Min(verticalmin, sign * GetPixel(x, y + 1).distance);
 
-        //read current
-        float current = grid[x + y * m_x_dims];
-
-        //solve eikonal equation in 1D or 2D depending on whether |h-v| >= 1
-        float eikonal;
-        if(Mathf.Abs(horizontalmin - verticalmin) >= 1.0f) 
-            eikonal = SolveEikonal1D(horizontalmin, verticalmin);
-        else 
-            eikonal = SolveEikonal2D(horizontalmin, verticalmin);
+        //solve eikonal equation in 2D
+        float eikonal = SolveEikonal2D(horizontalmin, verticalmin);
 
         //either keep the current distance, or take the eikonal solution if it is smaller
-        grid[x+y*m_x_dims] = Mathf.Min(current,eikonal);
+        p.distance = sign * Mathf.Min(current,eikonal);
+        SetPixel(x, y, p);
     }
 
     //sweep over the image using the eikonal equations to generate
-    //a perfect field (gradient length == 1 everywhere). This one is
-    //brute force as it simple iterates over every pixel n times.
-    //slow but effective!
-    public void EikonalSweepBruteForce(int iterations)
+    //a perfect field (gradient length == 1 everywhere).
+    public void EikonalSweep()
     {
         //clean the field so any none edge pixels simply contain 99999 for outer
-        //pixels, or -99999 for inner pixels
-        ClearNoneEdgePixels();
+        //pixels, or -99999 for inner pixels. also marks pixels as edge/not edge
+        ClearAndMarkNoneEdgePixels();
 
-        //seperate the field into 2 grids - 1 for inner pixels and 1 for outer pixels
-        float[] outside_grid, inside_grid;
-        BuildSweepGrids(out outside_grid, out inside_grid);
-
-        //repeat the eikonal iterations several times
-        for (int it = 0; it < iterations; it++) {
-            for (int y = 0; y < m_y_dims; y++) {
-                for (int x = 0; x < m_x_dims; x++) {
-                    SolveEikonal(x, y, outside_grid);
-                    SolveEikonal(x, y, inside_grid);
-                }
+        //sweep using eikonal algorithm in all 4 diagonal directions
+        for(int x = 0; x < m_x_dims; x++)
+        {
+            for(int y = 0; y < m_y_dims; y++)
+            {
+                SolveEikonal(x, y);
+            }
+            for (int y = m_y_dims-1; y >= 0; y--)
+            {
+                SolveEikonal(x, y);
             }
         }
-
-        //finish off by calling the 8-points Signed Sequential Euclidean Distance Transform
-        //solvers to efficiently clean up anything we didn't get to during the eikonal sweep
-        //SweepGrid(outside_grid);
-        //SweepGrid(inside_grid);
-
-        //write results back
-        for (int i = 0; i < m_pixels.Length; i++)
-            m_pixels[i].distance = outside_grid[i] - inside_grid[i];
+        for (int x = m_x_dims-1; x >=0; x--)
+        {
+            for (int y = 0; y < m_y_dims; y++)
+            {
+                SolveEikonal(x, y);
+            }
+            for (int y = m_y_dims - 1; y >= 0; y--)
+            {
+                SolveEikonal(x, y);
+            }
+        }
 
     }
 

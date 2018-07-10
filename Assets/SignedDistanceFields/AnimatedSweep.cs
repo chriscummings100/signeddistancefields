@@ -84,7 +84,7 @@ public class AnimatedGridSweep
         //clean the field so any none edge pixels simply contain 99999 for outer
         //pixels, or -99999 for inner pixels. we then read it and render it as before
         //so the user can see it
-        generator.ClearNoneEdgePixels();
+        generator.ClearAndMarkNoneEdgePixels();
         ReadGrid();
         WriteTexture();
         yield return new WaitForSeconds(0.5f);

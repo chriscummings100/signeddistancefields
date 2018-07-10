@@ -378,6 +378,7 @@
     <None Include="Assets\SignedDistanceFields\DistanceField.shader" />
     <None Include="Assets\SignedDistanceFields\DistanceFieldWithOffset.shader" />
     <None Include="Assets\SignedDistanceFields\Resources\catcredit.txt" />
+    <None Include="Assets\SignedDistanceFields\Resources\texturecredits.txt" />
     <None Include="Assets\SignedDistanceFields\SignedDistanceField.shader" />
     <None Include="C:\Users\chris\AppData\Local\Unity\cache\packages\packages.unity.com\com.unity.package-manager-ui@1.8.8\Editor\Resources\Styles\Main_Dark.uss" />
     <None Include="C:\Users\chris\AppData\Local\Unity\cache\packages\packages.unity.com\com.unity.package-manager-ui@1.8.8\Editor\Resources\Styles\Main_Light.uss" />

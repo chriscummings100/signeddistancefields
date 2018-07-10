@@ -25,7 +25,10 @@ public class SignedDistanceField : MonoBehaviour
         Neon,
         EdgeTexture,
         DropShadow,
-        Bevel
+        Bevel,
+        EdgeFind,
+        ShowNoiseTexture,
+        NoisyEdge
     }
 
     //shader to use
@@ -44,6 +47,8 @@ public class SignedDistanceField : MonoBehaviour
     public float m_border_width = 0.5f;
     public float m_offset = 0f;
     public float m_distance_visualisation_scale = 1f;
+    public float m_gradient_arrow_tile = 15f;
+    public float m_gradient_arrow_opacity = 1f;
 
     //used for neon effect (blog post 7)
     public float m_neon_power = 5f;
@@ -61,6 +66,21 @@ public class SignedDistanceField : MonoBehaviour
     public float m_circle_morph_amount;
     public float m_circle_morph_radius;
 
+    //bevel curvature (blog post 8)
+    public float m_bevel_curvature=0;
+
+    [Range(1,8)]
+    public int m_edge_find_steps = 1;
+
+    public Texture2D m_tile_texture;
+
+    public Texture2D m_noise_texture;
+    public float m_noise_anim;
+    public bool m_enable_edge_noise;
+    public float m_edge_noise_a;
+    public float m_edge_noise_b;
+    public bool m_fix_gradient;
+
     //internally created temp material
     Material m_material;
 
@@ -74,8 +94,8 @@ public class SignedDistanceField : MonoBehaviour
             AnimatedGridSweep anim = new AnimatedGridSweep();
             anim.Run(generator, this);
         }
-
-        m_circle_morph_amount = (Mathf.Sin(Time.time * 6) + 1) * 0.5f;
+        if(Application.isPlaying)
+            m_noise_anim = Time.time;
     }
 
     //OnRenderObject calls init, then sets up render parameters
@@ -108,6 +128,9 @@ public class SignedDistanceField : MonoBehaviour
         m_material.SetColor("_Fill", m_fill);
         m_material.SetColor("_Border", m_border);
         m_material.SetFloat("_DistanceVisualisationScale", m_distance_visualisation_scale);
+        m_material.SetFloat("_ArrowTiles", m_gradient_arrow_tile);
+        m_material.SetFloat("_ArrowOpacity", m_gradient_arrow_opacity);
+        m_material.SetTexture("_ArrowTex", Resources.Load<Texture2D>("arrow"));
 
         //parameters for effects in blog post 7
         m_material.SetFloat("_NeonPower", m_neon_power);
@@ -117,6 +140,17 @@ public class SignedDistanceField : MonoBehaviour
         m_material.SetFloat("_ShadowBorderWidth", m_shadow_border_width);
         m_material.SetFloat("_CircleMorphAmount", m_circle_morph_amount);
         m_material.SetFloat("_CircleMorphRadius", m_circle_morph_radius);
+        m_material.SetTexture("_TileTex", m_tile_texture);
+
+        //parameters for effects in blog post 8
+        m_material.SetFloat("_BevelCurvature", m_bevel_curvature);
+        m_material.SetInt("_EdgeFindSteps", m_edge_find_steps);
+        m_material.SetTexture("_NoiseTex", m_noise_texture);
+        m_material.SetFloat("_NoiseAnimTime", m_noise_anim);
+        m_material.SetInt("_EnableEdgeNoise", m_enable_edge_noise ? 1 : 0);
+        m_material.SetFloat("_EdgeNoiseA", m_edge_noise_a);
+        m_material.SetFloat("_EdgeNoiseB", m_edge_noise_b);
+        m_material.SetFloat("_FixGradient", m_fix_gradient ? 1 : 0);
 
     }
 
@@ -256,7 +290,7 @@ public class SignedDisanceFieldEditor : Editor
             //generator.BFRect(new Vector2(4, 34), new Vector2(60, 60));
             generator.PCircle(new Vector2(20, 28), 12, 5);
             generator.PCircle(new Vector2(40, 32), 14, 5);
-            generator.ClearNoneEdgePixels();
+            generator.ClearAndMarkNoneEdgePixels();
             field.m_texture = generator.End();
         }
 
@@ -273,7 +307,7 @@ public class SignedDisanceFieldEditor : Editor
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator(512, 512);
             generator.PCircle(new Vector2(160, 224), 92, 5);
             generator.PCircle(new Vector2(340, 256), 103, 5);
-            generator.Sweep();
+            generator.EikonalSweep();
             field.m_texture = generator.End();
         }
 
@@ -281,12 +315,56 @@ public class SignedDisanceFieldEditor : Editor
         {
             SignedDistanceFieldGenerator generator = new SignedDistanceFieldGenerator();
             generator.LoadFromTextureAntiAliased(Resources.Load<Texture2D>("cathires"));
-            generator.Sweep();
+            generator.EikonalSweep();
             generator.Downsample();
+            generator.Soften(3);
             field.m_texture = generator.End();
         }
 
+        if (GUILayout.Button("Make noise texture"))
+        {
+            field.m_noise_texture = new Texture2D(256, 256, TextureFormat.RGBAFloat, false);
+            Color[] cols = GenerateNoiseGrid(256,256,4,8f,2f,0.5f);
+            field.m_noise_texture.SetPixels(cols);
+            field.m_noise_texture.Apply();
+        }
+
         serializedObject.ApplyModifiedProperties();
+    }
+
+    Color[] GenerateNoiseGrid(int w, int h, int octaves, float frequency, float lacunarity, float persistance)
+    {
+        //calculate scalars for x/y dims
+        float xscl = 1f / (w - 1);
+        float yscl = 1f / (h - 1);
+
+        //allocate colour buffer then iterate over x and y
+        Color[] cols = new Color[w * h];
+        for (int x = 0; x < w; x++)
+        {
+            for (int y = 0; y < h; y++)
+            {
+                //classic multi-octave perlin noise sampler
+                //ends up with 4 octave noise samples
+                Vector4 tot = Vector4.zero;
+                float scl = 1;
+                float sum = 0;
+                float f = frequency;
+                for (int i = 0; i < octaves; i++)
+                {
+                    for (int c = 0; c < 4; c++)
+                        tot[c] += Mathf.PerlinNoise(c * 64 + f * x * xscl, f * y * yscl) * scl;
+                    sum += scl;
+                    f *= lacunarity;
+                    scl *= persistance;
+                }
+                tot /= sum;
+
+                //store noise value in colour
+                cols[y * w + x] = new Color(tot.x, tot.y, tot.z, tot.w);
+            }
+        }
+        return cols;
     }
 }
 #endif
