@@ -414,7 +414,7 @@ public class SignedDistanceFieldGenerator
     {
         for (int y = 0; y < m_y_dims; y++)
         {
-            for (int x = 0; x < m_y_dims; x++)
+            for (int x = 0; x < m_x_dims; x++)
             {
                 Pixel pix = GetPixel(x, y);
                 pix.edge = IsEdgePixel(x, y); //for eikonal sweep, mark edge pixels
